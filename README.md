@@ -2,7 +2,10 @@
 
 > Local-first memory for you **and** your AI agents. Capture notes, preferences and context in your browser — then feed them straight into any agent's prompt.
 
+
+🔗 **Live demo:** https://devilking7x.github.io/agent-memory-notes/
 [![MIT License](https://img.shields.io/badge/license-MIT-6a5cff.svg)](LICENSE)
+[![Live Demo](https://img.shields.io/badge/demo-live-6a5cff.svg)](https://devilking7x.github.io/agent-memory-notes/)
 [![React](https://img.shields.io/badge/React-19-61dafb.svg)](https://react.dev)
 [![Vite](https://img.shields.io/badge/Vite-7-646cff.svg)](https://vitejs.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6.svg)](https://www.typescriptlang.org)
