@@ -42,6 +42,21 @@ pnpm build    # production build → dist/
 2. Click **"For agent"** — everything is copied as one Markdown block.
 3. Paste it at the top of your agent's system prompt or chat.
 
+### Option B: MCP server — agents read/write directly 🤖
+
+The [`mcp-server/`](mcp-server/) directory is a [Model Context Protocol](https://modelcontextprotocol.io) server.
+Connect it to Claude Code or Claude Desktop and the agent gets direct tools —
+`memory_add`, `memory_search`, `memory_list`, `memory_update`, `memory_delete` —
+no copy-paste needed:
+
+```bash
+cd mcp-server && npm install
+claude mcp add agent-memory-notes -- node "$PWD/index.mjs"
+```
+
+Memories are stored in a local JSON file (`~/.agent-memory-notes/memories.json`),
+in the same format as the app's JSON export, so both stay compatible.
+
 It looks like this:
 
 ```markdown
