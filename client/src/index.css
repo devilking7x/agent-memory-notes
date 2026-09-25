@@ -662,3 +662,271 @@ body {
     gap: 10px;
   }
 }
+
+/* ---------- duplicate warning ---------- */
+.dup-warning {
+  margin-top: 16px;
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
+  background: color-mix(in srgb, var(--danger) 7%, transparent);
+  border-radius: 12px;
+  padding: 14px 16px;
+  animation: rise-in 0.18s ease;
+}
+
+.dup-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--danger);
+  font-size: 12.5px;
+}
+
+.dup-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.dup-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12.5px;
+}
+
+.dup-list .link {
+  font-size: 12.5px;
+  text-align: left;
+}
+
+.dup-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+/* ---------- stats row actions ---------- */
+.stats-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.count-badge {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 800;
+  min-width: 17px;
+  height: 17px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0 4px;
+}
+
+.ghost.active-filter {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-glow);
+}
+
+/* ---------- insights / stats panel ---------- */
+.stats-panel {
+  margin-bottom: 26px;
+  padding: 24px 28px;
+  animation: rise-in 0.18s ease;
+}
+
+.stats-grid {
+  display: grid;
+  gap: 28px;
+  grid-template-columns: 1.4fr 1fr;
+}
+
+.stats-eyebrow {
+  margin-bottom: 14px;
+}
+
+.chart {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.chart-bar {
+  fill: var(--accent);
+  opacity: 0.88;
+}
+
+.chart-bar.empty {
+  fill: var(--border);
+  opacity: 0.55;
+}
+
+.chart-grid {
+  stroke: var(--border-soft);
+  stroke-dasharray: 3 4;
+}
+
+.chart-axis {
+  stroke: var(--border);
+}
+
+.chart-tick {
+  fill: var(--muted);
+  font-size: 10px;
+  font-family: inherit;
+}
+
+.chart-val {
+  fill: var(--faint);
+  font-size: 10.5px;
+  font-weight: 700;
+  font-family: inherit;
+}
+
+.tagbars {
+  display: grid;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.tagbar {
+  display: grid;
+  grid-template-columns: 110px 1fr 26px;
+  align-items: center;
+  gap: 10px;
+}
+
+.tagbar-label {
+  font-size: 11.5px;
+  color: var(--faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tagbar-track {
+  background: var(--panel-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  height: 10px;
+  overflow: hidden;
+}
+
+.tagbar-fill {
+  background: var(--accent);
+  height: 100%;
+  border-radius: 999px;
+  opacity: 0.85;
+  transition: width 0.3s ease;
+}
+
+.tagbar-count {
+  font-size: 11.5px;
+  color: var(--accent);
+  font-weight: 700;
+  text-align: right;
+}
+
+.stats-facts {
+  display: flex;
+  gap: 22px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.stats-fact {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+
+.stats-fact b {
+  font-size: 19px;
+  color: var(--accent);
+}
+
+/* ---------- spaced review ---------- */
+.modal.review {
+  max-width: 620px;
+}
+
+.review-progress {
+  height: 3px;
+  background: var(--panel-soft);
+}
+
+.review-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.25s ease;
+}
+
+.review-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.review-stale {
+  font-size: 11px;
+  color: var(--accent);
+  opacity: 0.9;
+}
+
+.review-hidden {
+  margin-top: 18px;
+  width: 100%;
+  border: 1px dashed var(--border);
+  background: var(--panel-soft);
+  border-radius: 14px;
+  padding: 44px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: var(--faint);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  transition: all 0.15s ease;
+}
+
+.review-hidden:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.review-hidden small {
+  font-weight: 400;
+}
+
+.review-body {
+  margin-top: 16px;
+  max-height: 46vh;
+  overflow-y: auto;
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  padding: 16px 18px;
+  animation: fade-in 0.2s ease;
+}
+
+@media (max-width: 640px) {
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+  .stats-actions {
+    width: 100%;
+  }
+}

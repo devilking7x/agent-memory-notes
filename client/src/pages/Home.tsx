@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  AlertTriangle,
+  BarChart3,
   Brain,
   ClipboardCopy,
   Download,
+  History,
   Moon,
   Plus,
   Search,
@@ -13,19 +16,28 @@ import {
 import { toast } from "sonner";
 import MemoryCard from "@/components/MemoryCard";
 import MemoryDialog, { parseTags } from "@/components/MemoryDialog";
+import ReviewMode from "@/components/ReviewMode";
+import StatsPanel from "@/components/StatsPanel";
 import { useTheme } from "../contexts/ThemeContext";
 import {
   copyText,
   downloadFile,
+  findSimilarMemories,
   loadMemories,
+  markViewed,
   memoriesToAgentMarkdown,
+  memoriesToCSV,
   memoryToMarkdown,
+  parseCSVFile,
   parseImportFile,
   persistMemories,
+  reviewQueue,
   slugify,
   uid,
   type Memory,
 } from "@/lib/memory";
+
+const STALE_MS = 30 * 24 * 60 * 60 * 1000;
 
 export default function Home() {
   const [memories, setMemories] = useState<Memory[]>(() => loadMemories());
@@ -35,6 +47,9 @@ export default function Home() {
   const [capTitle, setCapTitle] = useState("");
   const [capBody, setCapBody] = useState("");
   const [capTags, setCapTags] = useState("");
+  const [showStats, setShowStats] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [dupMatches, setDupMatches] = useState<Array<{ memory: Memory; score: number }> | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const { theme, toggleTheme } = useTheme();
 
@@ -69,11 +84,22 @@ export default function Home() {
   const pinnedCount = memories.filter((m) => m.pinned).length;
   const openMemory = openId ? memories.find((m) => m.id === openId) ?? null : null;
 
-  const capture = () => {
-    if (!capTitle.trim()) {
-      toast.error("Give your memory a title first");
-      return;
-    }
+  const touchViewed = (id: string) =>
+    setMemories((v) => markViewed(v, id));
+
+  const openById = (id: string) => {
+    setOpenId(id);
+    touchViewed(id);
+  };
+
+  /** Least-recently-viewed first — powers spaced review. */
+  const queue = useMemo(() => reviewQueue(memories), [memories]);
+  const staleCount = useMemo(
+    () => memories.filter((m) => Date.now() - (m.lastViewedAt ?? m.createdAt) > STALE_MS).length,
+    [memories]
+  );
+
+  const doSave = () => {
     const now = Date.now();
     const m: Memory = {
       id: uid(),
@@ -83,12 +109,30 @@ export default function Home() {
       pinned: false,
       createdAt: now,
       updatedAt: now,
+      lastViewedAt: now,
     };
     setMemories((v) => [m, ...v]);
     setCapTitle("");
     setCapBody("");
     setCapTags("");
+    setDupMatches(null);
     toast.success("Memory saved");
+  };
+
+  const capture = () => {
+    if (!capTitle.trim()) {
+      toast.error("Give your memory a title first");
+      return;
+    }
+    // Fuzzy duplicate detection: warn before saving a near-duplicate.
+    if (!dupMatches) {
+      const matches = findSimilarMemories(capTitle, capBody, memories);
+      if (matches.length > 0) {
+        setDupMatches(matches);
+        return;
+      }
+    }
+    doSave();
   };
 
   const togglePin = (id: string) =>
@@ -127,6 +171,11 @@ export default function Home() {
     toast.success("Exported Markdown");
   };
 
+  const exportCSV = () => {
+    downloadFile("agent-memory-notes.csv", memoriesToCSV(memories), "text/csv");
+    toast.success("Exported CSV");
+  };
+
   const copyAllForAgent = async () => {
     if (!memories.length) {
       toast.error("No memories to copy yet");
@@ -138,21 +187,34 @@ export default function Home() {
     );
   };
 
+  const tsOf = (it: object, key: "createdAt" | "updatedAt", fallback: number): number => {
+    const v = (it as Record<string, unknown>)[key];
+    return typeof v === "number" && Number.isFinite(v) ? v : fallback;
+  };
+
   const onImportFile = (file: File) => {
     const reader = new FileReader();
     reader.onload = () => {
       try {
-        const items = parseImportFile(String(reader.result ?? ""));
+        const text = String(reader.result ?? "");
+        const isCsv = file.name.toLowerCase().endsWith(".csv");
+        const items = isCsv ? parseCSVFile(text) : parseImportFile(text);
         if (!items.length) {
           toast.error("No valid memories found in that file");
           return;
         }
         const now = Date.now();
-        const fresh: Memory[] = items.map((it) => ({ ...it, id: uid(), createdAt: now, updatedAt: now }));
+        const fresh: Memory[] = items.map((it) => ({
+          ...it,
+          id: uid(),
+          createdAt: tsOf(it, "createdAt", now),
+          updatedAt: tsOf(it, "updatedAt", now),
+          lastViewedAt: now,
+        }));
         setMemories((v) => [...fresh, ...v]);
         toast.success(`Imported ${fresh.length} ${fresh.length === 1 ? "memory" : "memories"}`);
       } catch {
-        toast.error("Couldn't read that file — is it valid JSON?");
+        toast.error("Couldn't read that file — is it valid JSON or CSV?");
       }
     };
     reader.readAsText(file);
@@ -188,7 +250,7 @@ export default function Home() {
           <h1 className="hero display">Remember everything. Feed it to your agent.</h1>
           <p className="hero-sub sub">
             Capture notes, preferences and context. Everything stays in your browser —
-            export it as Markdown or JSON whenever your AI agent needs to know.
+            export it as Markdown, JSON, or CSV whenever your AI agent needs to know.
           </p>
         </div>
 
@@ -205,6 +267,23 @@ export default function Home() {
             <b>{tags.length}</b>
             <span className="sub">tags</span>
           </div>
+          <div className="stats-actions">
+            <button
+              className="ghost sm"
+              onClick={() => setReviewOpen(true)}
+              title="Spaced review — resurface memories you haven't seen in a while"
+            >
+              <History size={13} /> Review
+              {staleCount > 0 && <span className="count-badge">{staleCount}</span>}
+            </button>
+            <button
+              className={`ghost sm${showStats ? " active-filter" : ""}`}
+              onClick={() => setShowStats((v) => !v)}
+              title="Show capture activity and tag insights"
+            >
+              <BarChart3 size={13} /> Insights
+            </button>
+          </div>
           <div className="tag-cloud">
             {tags.slice(0, 12).map(([t, n]) => (
               <button
@@ -219,6 +298,8 @@ export default function Home() {
           </div>
         </div>
 
+        {showStats && <StatsPanel memories={memories} />}
+
         <div className="grid gap-5 lg:grid-cols-[.9fr_1.1fr]">
           <section className="panel capture">
             <div className="eyebrow">
@@ -228,7 +309,10 @@ export default function Home() {
               <span>Title</span>
               <input
                 value={capTitle}
-                onChange={(e) => setCapTitle(e.target.value)}
+                onChange={(e) => {
+                  setCapTitle(e.target.value);
+                  setDupMatches(null);
+                }}
                 placeholder="e.g. My coding preferences"
                 maxLength={200}
               />
@@ -237,7 +321,10 @@ export default function Home() {
               <span>Memory (Markdown supported)</span>
               <textarea
                 value={capBody}
-                onChange={(e) => setCapBody(e.target.value)}
+                onChange={(e) => {
+                  setCapBody(e.target.value);
+                  setDupMatches(null);
+                }}
                 placeholder={"What should you — and your agent — remember?\n\n- Use bullet points\n- **Bold** what matters"}
                 rows={7}
               />
@@ -250,6 +337,32 @@ export default function Home() {
                 placeholder="preferences, coding"
               />
             </label>
+            {dupMatches && (
+              <div className="dup-warning" role="alert">
+                <div className="dup-head">
+                  <AlertTriangle size={14} />
+                  <b>Similar {dupMatches.length === 1 ? "memory exists" : "memories exist"}</b>
+                </div>
+                <ul className="dup-list">
+                  {dupMatches.map(({ memory, score }) => (
+                    <li key={memory.id}>
+                      <button className="link" onClick={() => openById(memory.id)}>
+                        {memory.title}
+                      </button>
+                      <span className="sub">{Math.round(score * 100)}% similar</span>
+                    </li>
+                  ))}
+                </ul>
+                <div className="dup-actions">
+                  <button className="primary sm" onClick={doSave} style={{ marginTop: 0 }}>
+                    Save anyway
+                  </button>
+                  <button className="ghost sm" onClick={() => setDupMatches(null)}>
+                    Keep editing
+                  </button>
+                </div>
+              </div>
+            )}
             <button className="primary wide" onClick={capture}>
               <Plus size={15} /> Save memory
             </button>
@@ -276,13 +389,16 @@ export default function Home() {
                 <button className="ghost sm" onClick={exportJSON} title="Download all as JSON">
                   <Download size={13} /> .json
                 </button>
-                <button className="ghost sm" onClick={() => fileRef.current?.click()} title="Import from JSON">
+                <button className="ghost sm" onClick={exportCSV} title="Download all as CSV">
+                  <Download size={13} /> .csv
+                </button>
+                <button className="ghost sm" onClick={() => fileRef.current?.click()} title="Import from JSON or CSV">
                   <Upload size={13} /> Import
                 </button>
                 <input
                   ref={fileRef}
                   type="file"
-                  accept=".json,application/json"
+                  accept=".json,.csv,application/json,text/csv"
                   hidden
                   onChange={(e) => {
                     const f = e.target.files?.[0];
@@ -315,7 +431,7 @@ export default function Home() {
                   key={m.id}
                   memory={m}
                   onTogglePin={togglePin}
-                  onOpen={setOpenId}
+                  onOpen={openById}
                   onCopy={copyOne}
                   onDownload={downloadOne}
                   onDelete={remove}
@@ -351,6 +467,23 @@ export default function Home() {
         onDownload={downloadOne}
         onDelete={remove}
       />
+      {reviewOpen && (
+        <ReviewMode
+          queue={queue}
+          onMarkViewed={touchViewed}
+          onOpenMemory={(id) => {
+            setReviewOpen(false);
+            openById(id);
+          }}
+          onClose={(reviewed) => {
+            setReviewOpen(false);
+            if (reviewed > 0)
+              toast.success(
+                `Reviewed ${reviewed} ${reviewed === 1 ? "memory" : "memories"}`
+              );
+          }}
+        />
+      )}
     </div>
   );
 }

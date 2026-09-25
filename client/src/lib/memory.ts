@@ -6,6 +6,8 @@ export interface Memory {
   pinned: boolean;
   createdAt: number;
   updatedAt: number;
+  /** Last time the user actually looked at this memory (dialog open or review). */
+  lastViewedAt?: number;
 }
 
 const STORAGE_KEY = "agent-memory-notes:v1";
@@ -103,7 +105,12 @@ export function loadMemories(): Memory[] {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed as Memory[];
+      if (Array.isArray(parsed))
+        // Backfill lastViewedAt for memories saved before view-tracking existed.
+        return (parsed as Memory[]).map((m) => ({
+          ...m,
+          lastViewedAt: m.lastViewedAt ?? m.createdAt,
+        }));
     }
     if (!localStorage.getItem(SEED_KEY)) {
       const seeded = seed();
@@ -115,6 +122,37 @@ export function loadMemories(): Memory[] {
   } catch {
     return [];
   }
+}
+
+/** When the user opens a memory, record that it was (re)seen. */
+export function markViewed(memories: Memory[], id: string): Memory[] {
+  return memories.map((m) =>
+    m.id === id ? { ...m, lastViewedAt: Date.now() } : m
+  );
+}
+
+/** Memories ordered least-recently-viewed first — the spaced-review queue. */
+export function reviewQueue(memories: Memory[]): Memory[] {
+  return [...memories].sort(
+    (a, b) => (a.lastViewedAt ?? a.createdAt) - (b.lastViewedAt ?? b.createdAt)
+  );
+}
+
+export function formatRelativeTime(ts: number | undefined): string {
+  if (!ts) return "never";
+  const diff = Date.now() - ts;
+  const min = Math.floor(diff / 60_000);
+  if (min < 1) return "just now";
+  if (min < 60) return `${min}m ago`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `${d}d ago`;
+  const w = Math.floor(d / 7);
+  if (w < 5) return `${w}w ago`;
+  const mo = Math.floor(d / 30);
+  if (mo < 12) return `${mo}mo ago`;
+  return `${Math.floor(d / 365)}y ago`;
 }
 
 export function persistMemories(memories: Memory[]): void {
@@ -179,6 +217,211 @@ export async function copyText(text: string): Promise<boolean> {
     ta.remove();
     return ok;
   }
+}
+
+/* ---------------- CSV export / import ---------------- */
+
+const CSV_HEADERS = [
+  "id",
+  "title",
+  "body",
+  "tags",
+  "pinned",
+  "createdAt",
+  "updatedAt",
+  "lastViewedAt",
+] as const;
+
+function csvCell(value: string | number | boolean): string {
+  const s = String(value);
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+/** Export all memories as RFC-4180 CSV (tags joined with ";"). */
+export function memoriesToCSV(list: Memory[]): string {
+  const rows = list.map((m) =>
+    [
+      m.id,
+      m.title,
+      m.body,
+      m.tags.join(";"),
+      m.pinned,
+      m.createdAt,
+      m.updatedAt,
+      m.lastViewedAt ?? m.createdAt,
+    ]
+      .map(csvCell)
+      .join(",")
+  );
+  return [CSV_HEADERS.join(","), ...rows].join("\r\n") + "\r\n";
+}
+
+/** Minimal RFC-4180 CSV parser (handles quoted fields, escaped quotes, CRLF). */
+function parseCSVRows(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = "";
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i + 1] === '"') {
+          field += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        field += c;
+      }
+    } else if (c === '"') {
+      inQuotes = true;
+    } else if (c === ",") {
+      row.push(field);
+      field = "";
+    } else if (c === "\n" || c === "\r") {
+      if (c === "\r" && text[i + 1] === "\n") i++;
+      row.push(field);
+      field = "";
+      if (row.length > 1 || row[0] !== "") rows.push(row);
+      row = [];
+    } else {
+      field += c;
+    }
+  }
+  row.push(field);
+  if (row.length > 1 || row[0] !== "") rows.push(row);
+  return rows;
+}
+
+const num = (v: string | undefined): number | undefined => {
+  if (v == null || v === "") return undefined;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : undefined;
+};
+
+/** Parse a CSV previously produced by memoriesToCSV (or hand-made with the same headers). */
+export function parseCSVFile(text: string): Omit<Memory, "id" | "createdAt" | "updatedAt">[] {
+  const rows = parseCSVRows(text);
+  if (!rows.length) return [];
+  const header = rows[0].map((h) => h.trim().toLowerCase());
+  const idx = (name: string) => header.indexOf(name);
+  const ti = idx("title");
+  if (ti === -1) return [];
+  const bi = idx("body");
+  const gi = idx("tags");
+  const pi = idx("pinned");
+  const out: Omit<Memory, "id" | "createdAt" | "updatedAt">[] = [];
+  for (const r of rows.slice(1)) {
+    const title = (r[ti] ?? "").trim().slice(0, 200);
+    if (!title) continue;
+    out.push({
+      title,
+      body: bi === -1 ? "" : (r[bi] ?? "").slice(0, 20000),
+      tags:
+        gi === -1
+          ? []
+          : (r[gi] ?? "")
+              .split(/[;,]/)
+              .map((t) => t.trim().toLowerCase().replace(/\s+/g, "-"))
+              .filter(Boolean)
+              .slice(0, 12),
+      pinned: pi !== -1 && /^(true|1|yes)$/i.test((r[pi] ?? "").trim()),
+      // Preserve original timestamps when present so re-imports keep history.
+      ...(num(r[idx("createdAt")]) !== undefined || num(r[idx("updatedAt")]) !== undefined
+        ? {
+            createdAt: num(r[idx("createdAt")]) ?? Date.now(),
+            updatedAt: num(r[idx("updatedAt")]) ?? Date.now(),
+          }
+        : {}),
+    } as Omit<Memory, "id" | "createdAt" | "updatedAt">);
+  }
+  return out;
+}
+
+/* ---------------- duplicate detection ---------------- */
+
+const STOPWORDS = new Set(
+  "a,an,the,and,or,but,if,then,else,for,to,of,in,on,at,by,with,from,as,is,are,was,were,be,been,being,it,its,this,that,these,those,i,you,he,she,we,they,my,your,his,her,our,their,me,him,us,them,do,does,did,not,no,yes,so,than,too,very,can,will,just,into,over,after,before,when,what,which,who,how,all,any,each,few,more,most,other,some,such,only,own,same".split(
+    ","
+  )
+);
+
+function tokens(s: string): Set<string> {
+  const set = new Set<string>();
+  for (const w of s.toLowerCase().split(/[^a-z0-9]+/)) {
+    if (w.length > 2 && !STOPWORDS.has(w)) set.add(w);
+  }
+  return set;
+}
+
+function jaccard(a: Set<string>, b: Set<string>): number {
+  if (!a.size && !b.size) return 1;
+  if (!a.size || !b.size) return 0;
+  let inter = 0;
+  a.forEach((w) => {
+    if (b.has(w)) inter++;
+  });
+  return inter / (a.size + b.size - inter);
+}
+
+/**
+ * Fuzzy-match a draft memory against existing ones.
+ * Returns up to `limit` matches above the similarity threshold, best first.
+ */
+export function findSimilarMemories(
+  title: string,
+  body: string,
+  memories: Memory[],
+  limit = 3
+): Array<{ memory: Memory; score: number }> {
+  const newTitle = tokens(title);
+  const newAll = tokens(`${title} ${body}`);
+  if (!newAll.size) return [];
+  const scored = memories
+    .map((m) => {
+      const titleScore = jaccard(newTitle, tokens(m.title));
+      const bodyScore = jaccard(newAll, tokens(`${m.title} ${m.body}`));
+      return { memory: m, score: 0.5 * titleScore + 0.5 * bodyScore };
+    })
+    .filter((s) => s.score >= 0.45)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+  return scored;
+}
+
+/* ---------------- stats ---------------- */
+
+export interface WeekBucket {
+  /** Timestamp of the week's Monday 00:00 (local). */
+  start: number;
+  label: string;
+  count: number;
+}
+
+/** Memories created per week for the last `weeks` weeks (oldest → newest). */
+export function weeklyActivity(memories: Memory[], weeks = 12): WeekBucket[] {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  now.setDate(now.getDate() - ((now.getDay() + 6) % 7)); // back to Monday
+  const buckets: WeekBucket[] = [];
+  for (let i = weeks - 1; i >= 0; i--) {
+    const start = now.getTime() - i * 7 * 24 * 60 * 60 * 1000;
+    const end = start + 7 * 24 * 60 * 60 * 1000;
+    const count = memories.filter(
+      (m) => m.createdAt >= start && m.createdAt < end
+    ).length;
+    buckets.push({
+      start,
+      label: new Date(start).toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+      }),
+      count,
+    });
+  }
+  return buckets;
 }
 
 export function parseImportFile(text: string): Omit<Memory, "id" | "createdAt" | "updatedAt">[] {

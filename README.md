@@ -16,8 +16,11 @@ AI agents are only as good as the context you give them. **Agent Memory Notes** 
 - 📌 **Pin important memories** — pinned items always float to the top
 - 🔍 **Full-text search + tag filters** — find anything in milliseconds
 - 🤖 **"Copy for agent"** — one click copies all memories as a paste-ready prompt block
-- 📥 **Export** — single memory or everything, as Markdown or JSON
-- 📤 **Import** — bring a JSON export back anytime
+- 🧠 **Spaced review** — flashcard-style review mode resurfaces memories you haven't looked at in a while, oldest-unseen first
+- 🧹 **Duplicate detection** — fuzzy matching warns you before saving a near-duplicate memory
+- 📊 **Insights** — hand-rolled charts: capture activity per week + top tags, plus stale-memory counts
+- 📥 **Export** — single memory or everything, as Markdown, JSON, or CSV
+- 📤 **Import** — bring a JSON or CSV export back anytime (timestamps preserved)
 - 🏷️ **Tag cloud** with live counts — click to filter
 - 🌓 **Dark / light theme**
 - 🔒 **100% local** — localStorage only. No account, no server, no tracking
