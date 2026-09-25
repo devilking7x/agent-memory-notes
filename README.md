@@ -84,6 +84,10 @@ client/src/
 └── index.css                 # theme variables + app styles
 ```
 
+## 📸 Screenshots
+
+![Agent Memory Notes dashboard with quick capture](screenshots/demo.png)
+
 ## 🗺️ Roadmap
 
 - [ ] Folders / collections
