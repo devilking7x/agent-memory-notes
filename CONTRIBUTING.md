@@ -1,16 +1,40 @@
-# Contributing to Invoice Generator
+# Contributing to Agent Memory Notes
 
-Contributions are welcome across calculations, print layout, accessibility, documentation, and international formatting.
+Thanks for your interest! This project is beginner-friendly — small fixes are very welcome, especially during Hacktoberfest.
 
-Run before opening a pull request:
+## Ways to contribute
+
+- **UI improvements** — search highlighting, tag colors, sort options, mobile layout
+- **MCP server** (`mcp-server/`) — new tools, better search, input validation
+- **Import/export** — new formats, backup/restore flows
+- **Docs & typos** — clarifications make great first PRs
+
+## Dev setup
 
 ```bash
-pnpm install
-pnpm check
-pnpm build
-pnpm format
+npm install
+npm run dev
 ```
 
-Test zero values, decimals, large quantities, 0–100% discount, tax changes, removing the final item, and browser print preview. Keep financial calculations transparent and avoid adding payment or data-storage integrations without an explicit design and privacy review.
+Verify the production build before submitting:
 
-Do not commit real client information, addresses, tax identifiers, invoices, or secrets. Use synthetic examples.
+```bash
+npm run build
+```
+
+To try the MCP server locally:
+
+```bash
+node mcp-server/index.mjs
+```
+
+## Pull request process
+
+1. Fork the repo and create a branch: `git checkout -b feat/my-change`
+2. Make your change and verify `npm run build` passes
+3. Open a PR describing **what** changed and **why**
+
+## Ground rules
+
+- **Stay local-first.** Memories never leave the device without explicit user action.
+- TypeScript + React, styled with Tailwind. Keep the bundle small.
